@@ -1,0 +1,5 @@
+{
+    "python.pythonPath": "C:\\devtools\\Python3\\python.exe",
+    "python.jediEnabled": false,
+    "python.languageServer": "Microsoft"
+}
