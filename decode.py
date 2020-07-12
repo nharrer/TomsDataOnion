@@ -117,7 +117,7 @@ def from_base85adobe(data):
         raise UserError(
             'The end delimiter ~> is missing in adobe base85 encoded string.')
 
-    d = d[:end - 2]
+    d = d[:end]
 
     # remove all whitespaces
     d = "".join(d.split())
@@ -192,7 +192,7 @@ def dump_wordlist(words, bytes_per_word=1, wrap_after_bytes=None):
             s = s.zfill(bytes_per_word * 2)
             s = s.upper()
             print(s + ' ', end='')
-    print()
+        print()
 
 def dump16(data: bytearray):
     dumphex(data, 2, 32)
@@ -202,14 +202,14 @@ def dumphex(data: bytearray, bytes_per_word=2, wrap_after_bytes=None):
     dump_wordlist(words, bytes_per_word, wrap_after_bytes)
 
 # -------------------------------------------------------------------------
-# Level 0
+# Layer 0
 # -------------------------------------------------------------------------
 
 def decode_level0(data):
     return data
 
 # -------------------------------------------------------------------------
-# Level 1
+# Layer 1
 # -------------------------------------------------------------------------
 
 def decode_level1(data):
@@ -221,7 +221,7 @@ def decode_level1(data):
     return out
 
 # -------------------------------------------------------------------------
-# Level 2
+# Layer 2
 # -------------------------------------------------------------------------
 
 def decode_level2(data):
@@ -253,7 +253,7 @@ def check_parity(c):
     return (p & 1) == 0
 
 # -------------------------------------------------------------------------
-# Level 3
+# Layer 3
 # -------------------------------------------------------------------------
 
 def decode_level3(data):
@@ -270,7 +270,7 @@ def decode_level3(data):
     return out
 
 # -------------------------------------------------------------------------
-# Level 4
+# Layer 4
 # -------------------------------------------------------------------------
 
 def decode_level4(data):
@@ -436,7 +436,7 @@ class IPv4:
         self.udp = UDP(data[self.ihl * 4:self.length], idx, self.src_ip, self.dst_ip, self.protocol)
 
 # -------------------------------------------------------------------------
-# Level 5
+# Layer 5
 # -------------------------------------------------------------------------
 
 def decode_level5(data):
@@ -454,9 +454,9 @@ def decode_level5(data):
 
     key = unwrap(key_encrypted, kek, iv1)
     cipher = AES.new(key, AES.MODE_CBC, iv2)
-    data = cipher.decrypt(pad(data_encrypted, AES.block_size))
+    cleartext = cipher.decrypt(pad(data_encrypted, AES.block_size))
 
-    return data[:len(data_encrypted)]
+    return cleartext[:len(data_encrypted)]
 
 # shamelessly stolen from https://github.com/tomdalling/aes_key_wrap/blob/master/lib/aes_key_wrap.rb
 # see also: https://tools.ietf.org/html/rfc3394
