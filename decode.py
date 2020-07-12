@@ -13,6 +13,7 @@ FILE_LAYER3 = 'layer3.txt'
 FILE_LAYER4 = 'layer4.txt'
 FILE_LAYER5 = 'layer5.txt'
 FILE_LAYER6 = 'layer6.txt'
+FILE_LAYER7 = 'layer7.txt'
 
 # -------------------------------------------------------------------------
 # Main
@@ -21,12 +22,13 @@ FILE_LAYER6 = 'layer6.txt'
 def run():
     try:
         #test_base85()
-        decode(FILE_LAYER0, FILE_LAYER1, decode_level0)
-        decode(FILE_LAYER1, FILE_LAYER2, decode_level1)
-        decode(FILE_LAYER2, FILE_LAYER3, decode_level2)
-        decode(FILE_LAYER3, FILE_LAYER4, decode_level3)
-        decode(FILE_LAYER4, FILE_LAYER5, decode_level4)
-        decode(FILE_LAYER5, FILE_LAYER6, decode_level5)
+        decode(FILE_LAYER0, FILE_LAYER1, decode_layer0)
+        decode(FILE_LAYER1, FILE_LAYER2, decode_layer1)
+        decode(FILE_LAYER2, FILE_LAYER3, decode_layer2)
+        decode(FILE_LAYER3, FILE_LAYER4, decode_layer3)
+        decode(FILE_LAYER4, FILE_LAYER5, decode_layer4)
+        decode(FILE_LAYER5, FILE_LAYER6, decode_layer5)
+        decode(FILE_LAYER6, FILE_LAYER7, decode_layer6)
         print('DONE!')
     except UserError as err:
         print('ERROR:', err)
@@ -205,14 +207,14 @@ def dumphex(data: bytearray, bytes_per_word=2, wrap_after_bytes=None):
 # Layer 0
 # -------------------------------------------------------------------------
 
-def decode_level0(data):
+def decode_layer0(data):
     return data
 
 # -------------------------------------------------------------------------
 # Layer 1
 # -------------------------------------------------------------------------
 
-def decode_level1(data):
+def decode_layer1(data):
     out = bytearray()
     for c in data:
         c = c ^ 0b01010101
@@ -224,7 +226,7 @@ def decode_level1(data):
 # Layer 2
 # -------------------------------------------------------------------------
 
-def decode_level2(data):
+def decode_layer2(data):
     out = bytearray()
     pos = 1
     byte = 0
@@ -256,8 +258,8 @@ def check_parity(c):
 # Layer 3
 # -------------------------------------------------------------------------
 
-def decode_level3(data):
-    key = bytearray('==[ Layer 4/5: Network Traffic ]', 'ascii')
+def decode_layer3(data):
+    key = bytearray('==[ Layer 4/6: Network Traffic ]', 'ascii')
     for idx in range(32):
         key[idx] = key[idx] ^ data[idx]
 
@@ -273,7 +275,7 @@ def decode_level3(data):
 # Layer 4
 # -------------------------------------------------------------------------
 
-def decode_level4(data):
+def decode_layer4(data):
     packets = decode_ipv4(data)
     packets_filtered = filter_ipv4(packets)
 
@@ -439,7 +441,7 @@ class IPv4:
 # Layer 5
 # -------------------------------------------------------------------------
 
-def decode_level5(data):
+def decode_layer5(data):
     pos_kek = 0
     pos_iv1 = pos_kek + 32
     pos_key = pos_iv1 + 8
@@ -477,6 +479,224 @@ def unwrap(wrapped_key, kek, iv=word_to_bytearray(0xA6A6A6A6A6A6A6A6, 8)):
         raise UserError('IV does not match unwrapped key.')
 
     return wordlist_to_bytearray(buffer[1:], 8)
+
+# -------------------------------------------------------------------------
+# Layer 6
+# -------------------------------------------------------------------------
+
+def decode_layer6(data):
+    # "hello world" example:
+    #data = bytearray([0x50, 0x48, 0xC2, 0x02, 0xA8, 0x4D, 0x00, 0x00, 0x00, 0x4F, 0x02, 0x50, 0x09, 0xC4, 0x02, 0x02, 0xE1, 0x01, 0x4F, 0x02, 0xC1, 0x22, 0x1D, 0x00, 0x00, 0x00, 0x48, 0x30, 0x02, 0x58, 0x03, 0x4F, 0x02, 0xB0, 0x29, 0x00, 0x00, 0x00, 0x48, 0x31, 0x02, 0x50, 0x0C, 0xC3, 0x02, 0xAA, 0x57, 0x48, 0x02, 0xC1, 0x21, 0x3A, 0x00, 0x00, 0x00, 0x48, 0x32, 0x02, 0x48, 0x77, 0x02, 0x48, 0x6F, 0x02, 0x48, 0x72, 0x02, 0x48, 0x6C, 0x02, 0x48, 0x64, 0x02, 0x48, 0x21, 0x02, 0x01, 0x65, 0x6F, 0x33, 0x34, 0x2C])
+    machine = TomtelCore_i69(data)
+    machine.run()
+    return machine.output
+
+class TomtelCore_i69:
+    mem: bytearray
+    output: bytearray
+    opcodes: map
+
+    a: int = 0
+    b: int = 0
+    c: int = 0
+    d: int = 0
+    e: int = 0
+    f: int = 0
+
+    la: int = 0
+    lb: int = 0
+    lc: int = 0
+    ld: int = 0
+    ptr: int = 0
+    pc: int = 0
+
+    def __init__(self, data: bytearray):
+        self.mem = data
+        self.output = bytearray()
+        self.opcodes = {
+            0xc2: self.add,
+            0xe1: self.aptr,
+            0xc1: self.cmp,
+            0x21: self.jez,
+            0x22: self.jnz,
+            0x02: self.out,
+            0xc3: self.sub,
+            0xc4: self.xor,
+        }
+
+    def run(self):
+        while True:
+            self.checkaddr(self.pc, 'pc')
+            opcode = self.mem[self.pc]
+            if opcode == 0x01: #halt
+                return
+            if (opcode & 0b11000000) == 0b01000000:
+                self.mv(opcode)
+            elif (opcode & 0b11000000) == 0b10000000:
+                self.mv32(opcode)
+            elif opcode in self.opcodes:
+                func = self.opcodes[opcode]
+                func()
+            else:
+                raise UserError(f'Invalid opcode 0x{opcode:02x} at pc = 0x{self.pc:04x}')
+
+    def checkaddr(self, addr, which):
+        if addr >= len(self.mem):
+            raise UserError(f'Addr out of range: {which} = 0x{addr:04x}, last memory address = 0x{len(self.mem)-1:04x}')
+
+    def read(self, addr):
+        self.checkaddr(addr, 'addr')
+        return self.mem[addr]
+
+    def write(self, addr, value):
+        self.checkaddr(addr, 'addr')
+        self.mem[addr] = value
+
+    def read32(self, addr):
+        v = self.read(addr + 0)
+        v = v | (self.read(addr + 1) << 8)
+        v = v | (self.read(addr + 2) << 16)
+        v = v | (self.read(addr + 3) << 24)
+        return v
+
+    def readregister(self, reg):
+        if reg < 1 or reg > 7:
+            raise UserError(f'Invalid 8-bit register = {reg}')
+        if reg == 1:
+            return self.a
+        if reg == 2:
+            return self.b
+        if reg == 3:
+            return self.c
+        if reg == 4:
+            return self.d
+        if reg == 5:
+            return self.e
+        if reg == 6:
+            return self.f
+
+        addr = self.ptr + self.c
+        value = self.read(addr)
+        return value
+
+    def setregister(self, reg, value):
+        if reg < 1 or reg > 7:
+            raise UserError(f'Invalid 8-bit register = {reg}')
+        elif reg == 1:
+            self.a = value
+        elif reg == 2:
+            self.b = value
+        elif reg == 3:
+            self.c = value
+        elif reg == 4:
+            self.d = value
+        elif reg == 5:
+            self.e = value
+        elif reg == 6:
+            self.f = value
+        else:
+            addr = self.ptr + self.c
+            self.write(addr, value)
+
+    def readregister32(self, reg):
+        if reg < 1 or reg > 6:
+            raise UserError(f'Invalid 32-bit register = {reg}')
+        if reg == 1:
+            return self.la
+        if reg == 2:
+            return self.lb
+        if reg == 3:
+            return self.lc
+        if reg == 4:
+            return self.ld
+        if reg == 5:
+            return self.ptr
+        if reg == 6:
+            return self.pc
+
+    def setregister32(self, reg, value):
+        if reg < 1 or reg > 6:
+            raise UserError(f'Invalid 32-bit register = {reg}')
+        elif reg == 1:
+            self.la = value
+        elif reg == 2:
+            self.lb = value
+        elif reg == 3:
+            self.lc = value
+        elif reg == 4:
+            self.ld = value
+        elif reg == 5:
+            self.ptr = value
+        else:
+            self.pc = value
+
+    def add(self): # ADD a <- b
+        self.pc = self.pc + 1
+        self.a = (self.a + self.b)
+        if self.a > 255:
+            self.a = 0
+
+    def aptr(self): # APTR imm8
+        self.pc = self.pc + 2
+        value = self.read(self.pc - 1)
+        self.ptr = self.ptr + value
+
+    def cmp(self): # CMP
+        self.pc = self.pc + 1
+        if self.a == self.b:
+            self.f = 0
+        else:
+            self.f = 1
+
+    def jez(self): # JEZ imm32
+        addr = self.read32(self.pc + 1)
+        if self.f == 0:
+            self.pc = addr
+        else:
+            self.pc = self.pc + 5
+
+    def jnz(self): # JNZ imm32
+        addr = self.read32(self.pc + 1)
+        if self.f != 0:
+            self.pc = addr
+        else:
+            self.pc = self.pc + 5
+
+    def mv(self, opcode):
+        self.pc = self.pc + 1
+        d = (opcode >> 3) & 0b111
+        s = opcode & 0b111
+        if s == 0:
+            value = self.read(self.pc)
+            self.pc = self.pc + 1
+        else:
+            value = self.readregister(s)
+        self.setregister(d, value)
+
+    def mv32(self, opcode):
+        self.pc = self.pc + 1
+        d = (opcode >> 3) & 0b111
+        s = opcode & 0b111
+        if s == 0:
+            value = self.read32(self.pc)
+            self.pc = self.pc + 4
+        else:
+            value = self.readregister32(s)
+        self.setregister32(d, value)
+
+    def out(self): # OUT a
+        self.pc = self.pc + 1
+        self.output.append(self.a)
+
+    def sub(self): # SUB a <- b
+        self.pc = self.pc + 1
+        self.a = self.a - self.b
+        if self.a < 0:
+            self.a = self.a + 255
+
+    def xor(self): # XOR a <- b
+        self.pc = self.pc + 1
+        self.a = self.a ^ self.b
 
 # -------------------------------------------------------------------------
 # DO IT
