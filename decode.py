@@ -634,7 +634,7 @@ class TomtelCore_i69:
         self.pc = self.pc + 1
         self.a = (self.a + self.b)
         if self.a > 255:
-            self.a = 0
+            self.a = self.a % 256
 
     def aptr(self): # APTR imm8
         self.pc = self.pc + 2
