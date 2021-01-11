@@ -4,6 +4,7 @@ import math
 from dataclasses import dataclass
 # pip install pycryptodome
 from Crypto.Cipher import AES
+from Crypto.Util import Counter
 from Crypto.Util.Padding import pad
 
 FILE_LAYER0 = 'layer0.txt'
@@ -455,7 +456,8 @@ def decode_layer5(data):
     data_encrypted = data[pos_data:]
 
     key = unwrap(key_encrypted, kek, iv1)
-    cipher = AES.new(key, AES.MODE_CBC, iv2)
+    counter = Counter.new(128, initial_value=int.from_bytes(iv2, byteorder='big'), little_endian=False)
+    cipher = AES.new(key, mode=AES.MODE_CTR, counter=counter)
     cleartext = cipher.decrypt(pad(data_encrypted, AES.block_size))
 
     return cleartext[:len(data_encrypted)]

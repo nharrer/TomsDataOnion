@@ -1,5 +1,6 @@
 # TomsDataOnion
-A solution for [#TomsDataOnion](https://www.tomdalling.com/toms-data-onion/)
+A solution for [#TomsDataOnion](https://www.tomdalling.com/toms-data-onion/).
+Tested with version 1.1.3.
 
 ## DANGER
 
